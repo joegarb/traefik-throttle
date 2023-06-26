@@ -18,6 +18,9 @@ type Throttle struct {
 	maxRequests int
 	retryCount  int
 	retryDelay  time.Duration
+
+	requestsCount int
+	mutex         sync.Mutex
 }
 
 type Config struct {
@@ -59,5 +62,33 @@ func New(ctx context.Context, next http.Handler, config *Config, name string) (h
 }
 
 func (t *Throttle) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
-	t.next.ServeHTTP(rw, req)
+	retryCount := t.retryCount
+
+	for retryCount >= 0 {
+		t.mutex.Lock()
+		if t.requestsCount < t.maxRequests {
+			t.requestsCount++
+			if retryCount < t.retryCount {
+				fmt.Printf("Passing request after retry: %s\n", req.URL.String())
+			}
+
+			t.mutex.Unlock()
+			defer func() {
+				t.mutex.Lock()
+				t.requestsCount-- // Decrement requestsCount after the response is received
+				t.mutex.Unlock()
+			}()
+
+			t.next.ServeHTTP(rw, req) // Pass the request to the next middleware
+			return
+		}
+		t.mutex.Unlock()
+
+		fmt.Printf("Too many requests; will retry %d time(s): %s\n", retryCount, req.URL.String())
+		retryCount--
+		time.Sleep(t.retryDelay)
+	}
+
+	fmt.Printf("Exhausted retry limit: %s\n", req.URL.String())
+	rw.WriteHeader(http.StatusTooManyRequests)
 }

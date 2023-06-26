@@ -1,0 +1,11 @@
+displayName: Traefik Throttle
+type: middleware
+
+import: github.com/joegarb/traefik-throttle
+
+summary: Limit the number of in-flight requests and retry them
+
+testData:
+  maxRequests: 100
+  retryCount: 3
+  retryDelay: 100ms

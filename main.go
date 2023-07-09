@@ -51,9 +51,20 @@ func New(ctx context.Context, next http.Handler, config *Config, name string) (h
 		}
 	}
 
+	// Enforce minimum values
+	if config.RetryCount < 0 {
+		config.RetryCount = 0
+	}
+	if config.MaxQueue < 0 {
+		config.MaxQueue = 0
+	}
+	if config.MaxRequests < 1 {
+		config.MaxRequests = 1
+	}
 	retryDelay, err := time.ParseDuration(config.RetryDelay)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse RetryDelay: %w", err)
+	if err != nil || retryDelay < time.Millisecond {
+		retryDelay = time.Millisecond
+		config.RetryDelay = retryDelay.String()
 	}
 
 	return &Throttle{

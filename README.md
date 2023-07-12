@@ -1,3 +1,3 @@
 # traefik-throttle
 
-Experimental Traefik middleware plugin that applies simple throttling of requests by limiting the number of in-flight requests and delaying those over the limit.
+Experimental Traefik middleware plugin to limit concurrent requests routed to services by delaying (rather than rejecting) requests over the limit. Useful for underpowered servers.

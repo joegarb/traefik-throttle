@@ -119,9 +119,18 @@ func (t *Throttle) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 			t.mutex.Unlock()
 		}
 
-		fmt.Printf("Too many requests; will retry %d time(s): %s\n", attempt, req.URL.String())
+		// Space the sleeping requests out to avoid having more than the max wake at once
+		t.mutex.Lock()
+		batchNumber := t.queueCount / t.maxRequests
+		t.mutex.Unlock()
+		retryDelay := t.retryDelay
+		if batchNumber > 1 {
+			retryDelay *= time.Duration(batchNumber)
+		}
+
+		fmt.Printf("Too many requests; will retry %d time(s) after %s: %s\n", attempt, retryDelay, req.URL.String())
 		attempt--
-		time.Sleep(t.retryDelay)
+		time.Sleep(retryDelay)
 	}
 
 	if queued {

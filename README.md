@@ -10,7 +10,6 @@ Created as a hack to stabilize NextCloud running on a Raspberry Pi 2 behind Trae
 
 | Option | Default | Description |
 |---|---|---|
-| `maxRequests` | `100` | Max concurrent requests passed to the service |
+| `maxRequests` | `10` | Max concurrent requests passed to the service |
 | `maxQueue` | `100` | Max requests held in the queue; excess requests receive a 429 |
-| `retryCount` | `3` | How many times a queued request will retry before giving up |
-| `retryDelay` | `200ms` | Delay between retries; scaled up for larger queue depths |
+| `maxWait` | `5s` | How long a queued request will wait for a slot before receiving a 429 |

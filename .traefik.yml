@@ -6,7 +6,6 @@ import: github.com/joegarb/traefik-throttle
 summary: Limit concurrent requests routed to services by delaying (rather than rejecting) requests over the limit. Useful for underpowered servers in very low-traffic environments (ie. homelabs).
 
 testData:
-  maxRequests: 100
+  maxRequests: 10
   maxQueue: 100
-  retryCount: 3
-  retryDelay: 100ms
+  maxWait: 5s

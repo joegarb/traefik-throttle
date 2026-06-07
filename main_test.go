@@ -9,8 +9,7 @@ func TestNewWithZeroMaxRequests(t *testing.T) {
 	config := &Config{
 		MaxRequests: 0,
 		MaxQueue:    100,
-		RetryCount:  3,
-		RetryDelay:  "200ms",
+		MaxWait:     "5s",
 	}
 
 	handler, err := New(nil, nil, config, "")
@@ -24,8 +23,8 @@ func TestNewWithZeroMaxRequests(t *testing.T) {
 	if throttle.config.MaxRequests != 1 {
 		t.Errorf("Expected config.MaxRequests to be 1, got %d", throttle.config.MaxRequests)
 	}
-	if throttle.maxRequests != 1 {
-		t.Errorf("Expected throttle.maxRequests to be 1, got %d", throttle.maxRequests)
+	if cap(throttle.sem) != 1 {
+		t.Errorf("Expected semaphore capacity to be 1, got %d", cap(throttle.sem))
 	}
 }
 
@@ -33,8 +32,7 @@ func TestNewWithPositiveMaxRequests(t *testing.T) {
 	config := &Config{
 		MaxRequests: 10,
 		MaxQueue:    100,
-		RetryCount:  3,
-		RetryDelay:  "200ms",
+		MaxWait:     "5s",
 	}
 
 	handler, err := New(nil, nil, config, "")
@@ -48,8 +46,8 @@ func TestNewWithPositiveMaxRequests(t *testing.T) {
 	if throttle.config.MaxRequests != 10 {
 		t.Errorf("Expected config.MaxRequests to be 10, got %d", throttle.config.MaxRequests)
 	}
-	if throttle.maxRequests != 10 {
-		t.Errorf("Expected throttle.maxRequests to be 10, got %d", throttle.maxRequests)
+	if cap(throttle.sem) != 10 {
+		t.Errorf("Expected semaphore capacity to be 10, got %d", cap(throttle.sem))
 	}
 }
 
@@ -57,8 +55,7 @@ func TestNewWithNegativeMaxQueue(t *testing.T) {
 	config := &Config{
 		MaxRequests: 100,
 		MaxQueue:    -10,
-		RetryCount:  3,
-		RetryDelay:  "200ms",
+		MaxWait:     "5s",
 	}
 
 	handler, err := New(nil, nil, config, "")
@@ -81,8 +78,7 @@ func TestNewWithPositiveMaxQueue(t *testing.T) {
 	config := &Config{
 		MaxRequests: 100,
 		MaxQueue:    10,
-		RetryCount:  3,
-		RetryDelay:  "200ms",
+		MaxWait:     "5s",
 	}
 
 	handler, err := New(nil, nil, config, "")
@@ -101,12 +97,11 @@ func TestNewWithPositiveMaxQueue(t *testing.T) {
 	}
 }
 
-func TestNewWithNegativeRetryCount(t *testing.T) {
+func TestNewWithInvalidMaxWait(t *testing.T) {
 	config := &Config{
 		MaxRequests: 100,
 		MaxQueue:    100,
-		RetryCount:  -5,
-		RetryDelay:  "200ms",
+		MaxWait:     "foo",
 	}
 
 	handler, err := New(nil, nil, config, "")
@@ -119,20 +114,19 @@ func TestNewWithNegativeRetryCount(t *testing.T) {
 		t.Error("Invalid handler type")
 	}
 
-	if throttle.config.RetryCount != 0 {
-		t.Errorf("Expected config.RetryCount to be 0, got %d", throttle.config.RetryCount)
+	if throttle.config.MaxWait != "1ms" {
+		t.Errorf("Expected config.MaxWait to be 1ms, got %s", throttle.config.MaxWait)
 	}
-	if throttle.retryCount != 0 {
-		t.Errorf("Expected throttle.retryCount to be 0, got %d", throttle.retryCount)
+	if throttle.maxWait != time.Millisecond {
+		t.Errorf("Expected throttle.maxWait to be 1ms, got %s", throttle.maxWait)
 	}
 }
 
-func TestNewWithPositiveRetryCount(t *testing.T) {
+func TestNewWithZeroMaxWait(t *testing.T) {
 	config := &Config{
 		MaxRequests: 100,
 		MaxQueue:    100,
-		RetryCount:  5,
-		RetryDelay:  "200ms",
+		MaxWait:     "0ms",
 	}
 
 	handler, err := New(nil, nil, config, "")
@@ -145,20 +139,19 @@ func TestNewWithPositiveRetryCount(t *testing.T) {
 		t.Error("Invalid handler type")
 	}
 
-	if throttle.config.RetryCount != 5 {
-		t.Errorf("Expected config.RetryCount to be 5, got %d", throttle.config.RetryCount)
+	if throttle.config.MaxWait != "1ms" {
+		t.Errorf("Expected config.MaxWait to be 1ms, got %s", throttle.config.MaxWait)
 	}
-	if throttle.retryCount != 5 {
-		t.Errorf("Expected throttle.retryCount to be 5, got %d", throttle.retryCount)
+	if throttle.maxWait != time.Millisecond {
+		t.Errorf("Expected throttle.maxWait to be 1ms, got %s", throttle.maxWait)
 	}
 }
 
-func TestNewWithInvalidRetryDelay(t *testing.T) {
+func TestNewWithPositiveMaxWait(t *testing.T) {
 	config := &Config{
 		MaxRequests: 100,
 		MaxQueue:    100,
-		RetryCount:  3,
-		RetryDelay:  "foo",
+		MaxWait:     "5s",
 	}
 
 	handler, err := New(nil, nil, config, "")
@@ -171,65 +164,10 @@ func TestNewWithInvalidRetryDelay(t *testing.T) {
 		t.Error("Invalid handler type")
 	}
 
-	expectedRetryDelay := time.Millisecond
-	if throttle.config.RetryDelay != "1ms" {
-		t.Errorf("Expected config.RetryDelay to be %s, got %s", expectedRetryDelay, throttle.config.RetryDelay)
+	if throttle.config.MaxWait != "5s" {
+		t.Errorf("Expected config.MaxWait to be 5s, got %s", throttle.config.MaxWait)
 	}
-	if throttle.retryDelay != expectedRetryDelay {
-		t.Errorf("Expected throttle.retryDelay to be %s, got %s", expectedRetryDelay, throttle.retryDelay)
-	}
-}
-
-func TestNewWithZeroRetryDelay(t *testing.T) {
-	config := &Config{
-		MaxRequests: 100,
-		MaxQueue:    100,
-		RetryCount:  3,
-		RetryDelay:  "0ms",
-	}
-
-	handler, err := New(nil, nil, config, "")
-	if err != nil {
-		t.Errorf("Error creating Throttle: %v", err)
-	}
-
-	throttle, ok := handler.(*Throttle)
-	if !ok {
-		t.Error("Invalid handler type")
-	}
-
-	expectedRetryDelay := time.Millisecond
-	if throttle.config.RetryDelay != "1ms" {
-		t.Errorf("Expected config.RetryDelay to be %s, got %s", expectedRetryDelay, throttle.config.RetryDelay)
-	}
-	if throttle.retryDelay != expectedRetryDelay {
-		t.Errorf("Expected throttle.retryDelay to be %s, got %s", expectedRetryDelay, throttle.retryDelay)
-	}
-}
-
-func TestNewWithPositiveRetryDelay(t *testing.T) {
-	config := &Config{
-		MaxRequests: 100,
-		MaxQueue:    100,
-		RetryCount:  3,
-		RetryDelay:  "100ms",
-	}
-
-	handler, err := New(nil, nil, config, "")
-	if err != nil {
-		t.Errorf("Error creating Throttle: %v", err)
-	}
-
-	throttle, ok := handler.(*Throttle)
-	if !ok {
-		t.Error("Invalid handler type")
-	}
-
-	expectedRetryDelay := 100 * time.Millisecond
-	if throttle.config.RetryDelay != "100ms" {
-		t.Errorf("Expected config.RetryDelay to be %s, got %s", expectedRetryDelay, throttle.config.RetryDelay)
-	}
-	if throttle.retryDelay != expectedRetryDelay {
-		t.Errorf("Expected throttle.retryDelay to be %s, got %s", expectedRetryDelay, throttle.retryDelay)
+	if throttle.maxWait != 5*time.Second {
+		t.Errorf("Expected throttle.maxWait to be 5s, got %s", throttle.maxWait)
 	}
 }

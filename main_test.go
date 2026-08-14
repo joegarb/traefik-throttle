@@ -23,8 +23,8 @@ func TestNewWithZeroMaxRequests(t *testing.T) {
 	if throttle.config.MaxRequests != 1 {
 		t.Errorf("Expected config.MaxRequests to be 1, got %d", throttle.config.MaxRequests)
 	}
-	if cap(throttle.sem) != 1 {
-		t.Errorf("Expected semaphore capacity to be 1, got %d", cap(throttle.sem))
+	if throttle.maxRequests != 1 {
+		t.Errorf("Expected maxRequests to be 1, got %d", throttle.maxRequests)
 	}
 }
 
@@ -46,8 +46,8 @@ func TestNewWithPositiveMaxRequests(t *testing.T) {
 	if throttle.config.MaxRequests != 10 {
 		t.Errorf("Expected config.MaxRequests to be 10, got %d", throttle.config.MaxRequests)
 	}
-	if cap(throttle.sem) != 10 {
-		t.Errorf("Expected semaphore capacity to be 10, got %d", cap(throttle.sem))
+	if throttle.maxRequests != 10 {
+		t.Errorf("Expected maxRequests to be 10, got %d", throttle.maxRequests)
 	}
 }
 

@@ -1,6 +1,7 @@
 package traefik_throttle
 
 import (
+	"context"
 	"testing"
 	"time"
 )
@@ -12,7 +13,7 @@ func TestNewWithZeroMaxRequests(t *testing.T) {
 		MaxWait:     "5s",
 	}
 
-	handler, err := New(nil, nil, config, "")
+	handler, err := New(context.Background(), nil, config, "")
 	if err != nil {
 		t.Errorf("Error creating Throttle: %v", err)
 	}
@@ -35,7 +36,7 @@ func TestNewWithPositiveMaxRequests(t *testing.T) {
 		MaxWait:     "5s",
 	}
 
-	handler, err := New(nil, nil, config, "")
+	handler, err := New(context.Background(), nil, config, "")
 	if err != nil {
 		t.Errorf("Error creating Throttle: %v", err)
 	}
@@ -58,7 +59,7 @@ func TestNewWithNegativeMaxQueue(t *testing.T) {
 		MaxWait:     "5s",
 	}
 
-	handler, err := New(nil, nil, config, "")
+	handler, err := New(context.Background(), nil, config, "")
 	if err != nil {
 		t.Errorf("Error creating Throttle: %v", err)
 	}
@@ -81,7 +82,7 @@ func TestNewWithPositiveMaxQueue(t *testing.T) {
 		MaxWait:     "5s",
 	}
 
-	handler, err := New(nil, nil, config, "")
+	handler, err := New(context.Background(), nil, config, "")
 	if err != nil {
 		t.Errorf("Error creating Throttle: %v", err)
 	}
@@ -104,7 +105,7 @@ func TestNewWithInvalidMaxWait(t *testing.T) {
 		MaxWait:     "foo",
 	}
 
-	handler, err := New(nil, nil, config, "")
+	handler, err := New(context.Background(), nil, config, "")
 	if err != nil {
 		t.Errorf("Error creating Throttle: %v", err)
 	}
@@ -129,7 +130,7 @@ func TestNewWithZeroMaxWait(t *testing.T) {
 		MaxWait:     "0ms",
 	}
 
-	handler, err := New(nil, nil, config, "")
+	handler, err := New(context.Background(), nil, config, "")
 	if err != nil {
 		t.Errorf("Error creating Throttle: %v", err)
 	}
@@ -154,7 +155,7 @@ func TestNewWithPositiveMaxWait(t *testing.T) {
 		MaxWait:     "5s",
 	}
 
-	handler, err := New(nil, nil, config, "")
+	handler, err := New(context.Background(), nil, config, "")
 	if err != nil {
 		t.Errorf("Error creating Throttle: %v", err)
 	}

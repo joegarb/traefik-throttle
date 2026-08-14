@@ -1,7 +1,7 @@
 # traefik-throttle
 
 [![CI](https://github.com/joegarb/traefik-throttle/actions/workflows/ci.yml/badge.svg)](https://github.com/joegarb/traefik-throttle/actions/workflows/ci.yml)
-[![Go Report Card](https://goreportcard.com/badge/github.com/joegarb/traefik-throttle)](https://goreportcard.com/report/github.com/joegarb/traefik-throttle)
+[![Go Reference](https://pkg.go.dev/badge/github.com/joegarb/traefik-throttle.svg)](https://pkg.go.dev/github.com/joegarb/traefik-throttle)
 [![Release](https://img.shields.io/github/v/release/joegarb/traefik-throttle)](https://github.com/joegarb/traefik-throttle/releases)
 [![License: MIT](https://img.shields.io/github/license/joegarb/traefik-throttle)](LICENSE)
 

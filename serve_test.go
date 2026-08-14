@@ -353,3 +353,47 @@ func TestStressStaysWithinLimit(t *testing.T) {
 		t.Errorf("inFlight = %d after drain, want 0 (leaked slot)", got)
 	}
 }
+
+// nopResponseWriter discards everything, so benchmarks measure the middleware
+// rather than response recording.
+type nopResponseWriter struct{ header http.Header }
+
+func (w nopResponseWriter) Header() http.Header         { return w.header }
+func (w nopResponseWriter) Write(b []byte) (int, error) { return len(b), nil }
+func (w nopResponseWriter) WriteHeader(int)             {}
+
+// Overhead of the middleware on the fast path (a slot is always free).
+func BenchmarkServeHTTP(b *testing.B) {
+	next := http.HandlerFunc(func(http.ResponseWriter, *http.Request) {})
+	h, err := New(context.Background(), next, &Config{MaxRequests: 1000, MaxQueue: 1000, MaxWait: "5s"}, "bench")
+	if err != nil {
+		b.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	rw := nopResponseWriter{header: make(http.Header)}
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		h.ServeHTTP(rw, req)
+	}
+}
+
+// Throughput under concurrency, with enough slots that requests rarely queue.
+func BenchmarkServeHTTPParallel(b *testing.B) {
+	next := http.HandlerFunc(func(http.ResponseWriter, *http.Request) {})
+	h, err := New(context.Background(), next, &Config{MaxRequests: 100, MaxQueue: 100000, MaxWait: "5s"}, "bench")
+	if err != nil {
+		b.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	b.RunParallel(func(pb *testing.PB) {
+		rw := nopResponseWriter{header: make(http.Header)}
+		for pb.Next() {
+			h.ServeHTTP(rw, req)
+		}
+	})
+}

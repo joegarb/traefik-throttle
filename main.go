@@ -179,8 +179,8 @@ func (t *Throttle) giveUp(ch chan struct{}) {
 func (t *Throttle) abandon(ch chan struct{}) bool {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	for i, w := range t.queue {
-		if w == ch {
+	for i := 0; i < len(t.queue); i++ {
+		if t.queue[i] == ch {
 			t.queue = append(t.queue[:i], t.queue[i+1:]...)
 			return true
 		}

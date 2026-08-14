@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -234,4 +235,97 @@ func TestClientCancelWhileQueued(t *testing.T) {
 
 	close(b.release)
 	waitWG(t, &wg, 3*time.Second)
+}
+
+func firePath(h http.Handler, path string, wg *sync.WaitGroup) {
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		h.ServeHTTP(httptest.NewRecorder(), req)
+	}()
+}
+
+// Queued requests are granted slots in the order they arrived.
+func TestQueuedRequestsServedInFIFOOrder(t *testing.T) {
+	firstIn := make(chan struct{})
+	releaseFirst := make(chan struct{})
+	var mu sync.Mutex
+	var order []string
+
+	backend := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		order = append(order, r.URL.Path)
+		mu.Unlock()
+		if r.URL.Path == "/first" {
+			close(firstIn)
+			<-releaseFirst
+		}
+		w.WriteHeader(http.StatusOK)
+	})
+
+	h := mustThrottle(t, backend, 1, 10, "5s")
+
+	var wg sync.WaitGroup
+	firePath(h, "/first", &wg) // takes the only slot, blocks
+	<-firstIn
+	for _, p := range []string{"/b", "/c", "/d"} {
+		firePath(h, p, &wg)
+		time.Sleep(40 * time.Millisecond) // ensure each enqueues in order
+	}
+	close(releaseFirst)
+	waitWG(t, &wg, 3*time.Second)
+
+	mu.Lock()
+	got := strings.Join(order, ",")
+	mu.Unlock()
+	if got != "/first,/b,/c,/d" {
+		t.Errorf("service order = %q, want /first,/b,/c,/d", got)
+	}
+}
+
+// Under heavy contention with some clients cancelling, the limit is never
+// breached, no slots leak, and every request terminates (guards the handoff
+// and abandon paths; most valuable with -race).
+func TestStressStaysWithinLimit(t *testing.T) {
+	const limit = 4
+	var inFlight, maxSeen int32
+
+	backend := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		n := atomic.AddInt32(&inFlight, 1)
+		for {
+			m := atomic.LoadInt32(&maxSeen)
+			if n <= m || atomic.CompareAndSwapInt32(&maxSeen, m, n) {
+				break
+			}
+		}
+		time.Sleep(time.Millisecond)
+		atomic.AddInt32(&inFlight, -1)
+		w.WriteHeader(http.StatusOK)
+	})
+	h := mustThrottle(t, backend, limit, 1000, "2s")
+
+	var wg sync.WaitGroup
+	for i := 0; i < 300; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			ctx := context.Background()
+			if i%5 == 0 {
+				var cancel context.CancelFunc
+				ctx, cancel = context.WithTimeout(context.Background(), time.Duration(i%3)*time.Millisecond)
+				defer cancel()
+			}
+			req := httptest.NewRequest(http.MethodGet, "/", nil).WithContext(ctx)
+			h.ServeHTTP(httptest.NewRecorder(), req)
+		}(i)
+	}
+	waitWG(t, &wg, 15*time.Second)
+
+	if got := atomic.LoadInt32(&maxSeen); got > limit {
+		t.Errorf("max concurrent = %d, exceeded limit %d", got, limit)
+	}
+	if got := atomic.LoadInt32(&inFlight); got != 0 {
+		t.Errorf("inFlight = %d after drain, want 0 (leaked slot)", got)
+	}
 }

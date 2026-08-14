@@ -284,6 +284,30 @@ func TestQueuedRequestsServedInFIFOOrder(t *testing.T) {
 	}
 }
 
+// Rejections carry a Retry-After header derived from maxWait.
+func TestRejectionSetsRetryAfter(t *testing.T) {
+	b := newBlockingBackend()
+	h := mustThrottle(t, b, 1, 0, "5s") // maxQueue 0 -> reject immediately when busy
+
+	var wg sync.WaitGroup
+	var aCode int32
+	fireAsync(h, nil, &wg, &aCode)
+	<-b.arrived // A holds the only slot
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req) // rejected synchronously
+	if rr.Code != http.StatusTooManyRequests {
+		t.Fatalf("status = %d, want 429", rr.Code)
+	}
+	if ra := rr.Header().Get("Retry-After"); ra != "5" {
+		t.Errorf("Retry-After = %q, want \"5\"", ra)
+	}
+
+	close(b.release)
+	waitWG(t, &wg, 3*time.Second)
+}
+
 // Under heavy contention with some clients cancelling, the limit is never
 // breached, no slots leak, and every request terminates (guards the handoff
 // and abandon paths; most valuable with -race).

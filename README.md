@@ -4,7 +4,7 @@ Traefik middleware plugin to limit concurrent requests routed to services by del
 
 ## Background
 
-Originally built to stabilize NextCloud running on a Raspberry Pi 2 behind Traefik. NextCloud's web UI fires many concurrent requests on load, which overwhelmed the Pi and caused crashes. This middleware queues the excess requests and lets them through gradually, rather than hammering the backend all at once.
+Originally built to stabilize NextCloud running on a Raspberry Pi 2 behind Traefik. NextCloud's web UI fires many concurrent requests, which overwhelmed the Pi and caused crashes. This middleware queues the excess requests and lets them through gradually, rather than hammering the backend all at once.
 
 ## Configuration
 
@@ -13,3 +13,6 @@ Originally built to stabilize NextCloud running on a Raspberry Pi 2 behind Traef
 | `maxRequests` | `10` | Max concurrent requests passed to the service |
 | `maxQueue` | `100` | Max requests held in the queue; excess requests receive a 429 |
 | `maxWait` | `5s` | How long a queued request will wait for a slot before receiving a 429 |
+| `verbose` | `false` | Log a line per queued/rejected request (off by default to avoid flooding logs under load) |
+
+Rejections (429) include a `Retry-After` header derived from `maxWait`.

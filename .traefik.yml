@@ -9,3 +9,4 @@ testData:
   maxRequests: 10
   maxQueue: 100
   maxWait: 5s
+  verbose: false

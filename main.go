@@ -9,8 +9,8 @@ import (
 	"time"
 )
 
-const typeName = "Throttle"
-
+// Throttle is a Traefik middleware that caps the number of concurrent requests
+// forwarded to a backend, queuing any excess instead of rejecting it outright.
 type Throttle struct {
 	config      *Config
 	next        http.Handler
@@ -26,6 +26,7 @@ type Throttle struct {
 	queue  []chan struct{} // FIFO of waiters; each is signalled when granted a slot
 }
 
+// Config holds the plugin configuration.
 type Config struct {
 	MaxRequests int    `json:"maxRequests"`
 	MaxQueue    int    `json:"maxQueue"`
@@ -33,6 +34,7 @@ type Config struct {
 	Verbose     bool   `json:"verbose"`
 }
 
+// CreateConfig returns the default plugin configuration.
 func CreateConfig() *Config {
 	return &Config{
 		MaxRequests: 10,
@@ -42,6 +44,7 @@ func CreateConfig() *Config {
 	}
 }
 
+// New builds a Throttle middleware from the given configuration.
 func New(ctx context.Context, next http.Handler, config *Config, name string) (http.Handler, error) {
 	if config == nil {
 		config = CreateConfig()

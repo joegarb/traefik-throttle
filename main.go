@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"strconv"
 	"sync"
 	"time"
 )
@@ -17,6 +18,8 @@ type Throttle struct {
 	maxRequests int
 	maxQueue    int
 	maxWait     time.Duration
+	verbose     bool
+	retryAfter  string // seconds, sent as the Retry-After header on 429s
 
 	mu     sync.Mutex
 	active int             // slots currently reserved for the backend
@@ -27,6 +30,7 @@ type Config struct {
 	MaxRequests int    `json:"maxRequests"`
 	MaxQueue    int    `json:"maxQueue"`
 	MaxWait     string `json:"maxWait"`
+	Verbose     bool   `json:"verbose"`
 }
 
 func CreateConfig() *Config {
@@ -34,6 +38,7 @@ func CreateConfig() *Config {
 		MaxRequests: 10,
 		MaxQueue:    100,
 		MaxWait:     "5s",
+		Verbose:     false,
 	}
 }
 
@@ -54,6 +59,11 @@ func New(ctx context.Context, next http.Handler, config *Config, name string) (h
 		config.MaxWait = maxWait.String()
 	}
 
+	retryAfter := int64((maxWait + time.Second - 1) / time.Second) // ceil to seconds
+	if retryAfter < 1 {
+		retryAfter = 1
+	}
+
 	return &Throttle{
 		config:      config,
 		next:        next,
@@ -61,6 +71,8 @@ func New(ctx context.Context, next http.Handler, config *Config, name string) (h
 		maxRequests: config.MaxRequests,
 		maxQueue:    config.MaxQueue,
 		maxWait:     maxWait,
+		verbose:     config.Verbose,
+		retryAfter:  strconv.FormatInt(retryAfter, 10),
 	}, nil
 }
 
@@ -79,13 +91,27 @@ func (t *Throttle) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 		defer t.release()
 		t.next.ServeHTTP(rw, req)
 	case queueFull:
-		fmt.Printf("Request queue is full: %s\n", req.URL.String())
-		rw.WriteHeader(http.StatusTooManyRequests)
+		t.logf("Request queue is full: %s\n", req.URL.String())
+		t.reject(rw)
 	case waitTimeout:
-		fmt.Printf("Timed out waiting: %s\n", req.URL.String())
-		rw.WriteHeader(http.StatusTooManyRequests)
+		t.logf("Timed out waiting: %s\n", req.URL.String())
+		t.reject(rw)
 	case clientGone:
-		fmt.Printf("Client disconnected: %s\n", req.URL.String())
+		t.logf("Client disconnected: %s\n", req.URL.String())
+	}
+}
+
+// reject responds with 429 and a Retry-After hint.
+func (t *Throttle) reject(rw http.ResponseWriter) {
+	rw.Header().Set("Retry-After", t.retryAfter)
+	rw.WriteHeader(http.StatusTooManyRequests)
+}
+
+// logf writes a line only when verbose logging is enabled, so a busy queue
+// doesn't flood the logs on the very servers this plugin is meant to protect.
+func (t *Throttle) logf(format string, args ...interface{}) {
+	if t.verbose {
+		fmt.Printf(format, args...)
 	}
 }
 

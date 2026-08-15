@@ -43,8 +43,10 @@ jobs:
       # Full gate — never tag a build the catalog would reject.
       - run: go vet ./...
       - run: go test -race ./...
-      - name: Yaegi compatibility
+      - name: Yaegi compatibility (v0.15.1 — regression floor)
         run: go run github.com/traefik/yaegi/cmd/yaegi@v0.15.1 test .
+      - name: Yaegi compatibility (v0.16.1 — Traefik v3 current)
+        run: go run github.com/traefik/yaegi/cmd/yaegi@v0.16.1 test .
 
       - name: Cut release
         env:

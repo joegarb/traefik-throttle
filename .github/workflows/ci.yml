@@ -23,6 +23,10 @@ jobs:
       - run: go vet ./...
       - run: go test -race ./...
 
+      - name: Yaegi compatibility (isolated module — keeps yaegi out of the plugin's go.mod)
+        working-directory: yaegicheck
+        run: go test -race ./...
+
   lint:
     runs-on: ubuntu-latest
     steps:

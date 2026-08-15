@@ -1,0 +1,73 @@
+name: Release
+
+# Cuts a GitHub release (which is a git tag) on demand. The Traefik plugin
+# catalog polls GitHub ~daily and indexes new tags automatically, so tagging is
+# all that "publishing" requires.
+#
+# Releases are manual by design: the plugin has no runtime dependencies (stdlib
+# only), so the only thing that changes what the catalog serves is a deliberate
+# edit to main.go / .traefik.yml — i.e. a human PR. Dependabot only bumps CI
+# actions, which never change the shipped plugin and so never warrant a release.
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: "Version bump"
+        type: choice
+        options: [patch, minor, major]
+        default: patch
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # create tags and releases
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version: "1.24"
+
+      # Full gate — never tag a build the catalog would reject.
+      - run: go vet ./...
+      - run: go test -race ./...
+      - name: Yaegi compatibility
+        run: go run github.com/traefik/yaegi/cmd/yaegi@v0.15.1 test .
+
+      - name: Cut release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BUMP: ${{ github.event.inputs.bump }}
+        run: |
+          set -euo pipefail
+
+          latest=$(git tag --list 'v*' --sort=-v:refname | head -n1)
+          latest=${latest:-v0.0.0}
+          echo "Latest tag: $latest"
+
+          v=${latest#v}
+          IFS=. read -r MA MI PA <<<"$v"
+          case "$BUMP" in
+            major) MA=$((MA + 1)); MI=0; PA=0 ;;
+            minor) MI=$((MI + 1)); PA=0 ;;
+            patch) PA=$((PA + 1)) ;;
+          esac
+          next="v${MA}.${MI}.${PA}"
+          echo "Releasing $next (bump: $BUMP)"
+
+          gh release create "$next" \
+            --target "$GITHUB_SHA" \
+            --title "$next" \
+            --generate-notes

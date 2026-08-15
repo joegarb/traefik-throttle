@@ -10,3 +10,4 @@ testData:
   maxQueue: 100
   maxWait: 5s
   verbose: false
+  spacing: 0s

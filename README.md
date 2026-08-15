@@ -72,5 +72,6 @@ labels:
 | `maxQueue` | `100` | Max requests held in the queue; excess requests receive a 429 |
 | `maxWait` | `5s` | How long a queued request will wait for a slot before receiving a 429 |
 | `verbose` | `false` | Log a line per queued/rejected request (off by default to avoid flooding logs under load) |
+| `spacing` | `0s` | Minimum gap between admissions to the service. Staggers bursts so a slow upstream isn't hit all at once (e.g. `20ms`); `0s` disables it |
 
 Rejections (429) include a `Retry-After` header derived from `maxWait`.

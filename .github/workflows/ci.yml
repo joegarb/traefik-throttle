@@ -24,11 +24,29 @@ jobs:
       - run: go test -race ./...
 
       # Interpret the plugin exactly as Traefik does — the catalog's own
-      # validation (Piceus) loads plugins through Yaegi. Pinned to v0.15.1, the
-      # version whose abandon-path bug this plugin works around; `go run` keeps
-      # Yaegi out of the plugin's go.mod (the catalog rejects that dependency).
-      - name: Yaegi compatibility
+      # validation (Piceus) loads plugins through Yaegi. `go run` keeps Yaegi out
+      # of the plugin's go.mod (the catalog rejects that dependency). Two pinned
+      # versions bracket what users actually run: v0.15.1 (the abandon-path bug
+      # this plugin works around — a regression floor) and v0.16.1 (what Traefik
+      # v3 currently ships). Bump the latter when Traefik upgrades its Yaegi.
+      - name: Yaegi compatibility (v0.15.1 — regression floor)
         run: go run github.com/traefik/yaegi/cmd/yaegi@v0.15.1 test .
+      - name: Yaegi compatibility (v0.16.1 — Traefik v3 current)
+        run: go run github.com/traefik/yaegi/cmd/yaegi@v0.16.1 test .
+
+  # Non-blocking early warning: does the plugin still interpret under the latest
+  # Yaegi release, ahead of what Traefik ships? Deliberately NOT a required check
+  # — a red result flags a future break to investigate, without blocking merges,
+  # auto-merges, or releases (which only gate on the pinned versions above).
+  yaegi-canary:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: "1.24"
+      - name: Yaegi compatibility (latest — informational)
+        run: go run github.com/traefik/yaegi/cmd/yaegi@latest test .
 
   lint:
     runs-on: ubuntu-latest

@@ -57,4 +57,9 @@ jobs:
           go-version: "1.24"
       - uses: golangci/golangci-lint-action@v9
         with:
-          version: latest
+          # Pinned, not "latest": lint is a required check that gates auto-merge
+          # and releases, so a floating linter version could red-wall the repo on
+          # any golangci-lint release (including a future v3 that rejects the v2
+          # config). Bump this deliberately — Dependabot manages the action ref
+          # above, but not this tool version.
+          version: v2.12.2

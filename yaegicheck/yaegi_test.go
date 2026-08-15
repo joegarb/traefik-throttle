@@ -1,10 +1,13 @@
-package traefik_throttle_test
+// Package yaegicheck lives in its own module so the Yaegi dependency it needs
+// to exercise Traefik's interpreter never enters the plugin's own go.mod (the
+// Traefik Plugin Catalog rejects plugins that depend on github.com/traefik/yaegi).
+package yaegicheck
 
 import (
 	"context"
-	_ "embed"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"reflect"
 	"sync"
 	"sync/atomic"
@@ -15,12 +18,20 @@ import (
 	"github.com/traefik/yaegi/stdlib"
 )
 
-//go:embed main.go
-var pluginSource string
+// pluginSource reads the plugin's source from the parent module so Yaegi can
+// interpret it (as Traefik does).
+func pluginSource(t *testing.T) string {
+	t.Helper()
+	b, err := os.ReadFile("../main.go")
+	if err != nil {
+		t.Fatalf("read plugin source: %v", err)
+	}
+	return string(b)
+}
 
-// interpretedHandler loads the plugin through Yaegi (as Traefik does) and
-// returns its middleware handler, so tests exercise the real interpreted code
-// paths — not the natively compiled ones.
+// interpretedHandler loads the plugin through Yaegi and returns its middleware
+// handler, so tests exercise the real interpreted code paths — not the natively
+// compiled ones.
 func interpretedHandler(t *testing.T, next http.Handler, maxRequests, maxQueue int, maxWait string) http.Handler {
 	t.Helper()
 
@@ -28,7 +39,7 @@ func interpretedHandler(t *testing.T, next http.Handler, maxRequests, maxQueue i
 	if err := i.Use(stdlib.Symbols); err != nil {
 		t.Fatalf("use stdlib: %v", err)
 	}
-	if _, err := i.Eval(pluginSource); err != nil {
+	if _, err := i.Eval(pluginSource(t)); err != nil {
 		t.Fatalf("plugin is not Yaegi-compatible: %v", err)
 	}
 
@@ -69,7 +80,7 @@ func TestYaegiCanInterpretPlugin(t *testing.T) {
 	if err := i.Use(stdlib.Symbols); err != nil {
 		t.Fatalf("use stdlib: %v", err)
 	}
-	if _, err := i.Eval(pluginSource); err != nil {
+	if _, err := i.Eval(pluginSource(t)); err != nil {
 		t.Fatalf("plugin is not Yaegi-compatible: %v", err)
 	}
 }

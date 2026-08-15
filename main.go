@@ -46,7 +46,7 @@ func CreateConfig() *Config {
 		MaxQueue:    100,
 		MaxWait:     "5s",
 		Verbose:     false,
-		Spacing:     "0s",
+		Spacing:     "20ms",
 	}
 }
 

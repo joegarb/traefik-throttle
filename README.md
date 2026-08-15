@@ -28,7 +28,7 @@ experimental:
   plugins:
     throttle:
       moduleName: github.com/joegarb/traefik-throttle
-      version: v0.3.0 # see the Releases page for the latest version
+      version: v0.3.1 # see the Releases page for the latest version
 ```
 
 ## Usage

@@ -72,5 +72,16 @@ labels:
 | `maxQueue` | `100` | Max requests held in the queue; excess requests receive a 429 |
 | `maxWait` | `5s` | How long a queued request will wait for a slot before receiving a 429 |
 | `verbose` | `false` | Log a line per queued/rejected request (off by default to avoid flooding logs under load) |
+| `spacing` | `20ms` | Minimum gap between admissions to the service, staggering bursts so a slow upstream isn't hit all at once. `0s` disables it |
 
 Rejections (429) include a `Retry-After` header derived from `maxWait`.
+
+## Tuning
+
+These are protection knobs, and the right values depend on **your** service and its traffic — the defaults suit a small, underpowered homelab app, but a busier or beefier backend will want different numbers. Watch how the app behaves under load and adjust:
+
+- **`maxRequests`** limits *concurrency* — the number of requests in flight at the backend at once. Too high and you can exhaust its CPU/memory (e.g. PHP workers on a tiny box); too low and normal traffic queues needlessly.
+- **`spacing`** limits *rate* — how fast requests are admitted. This is a separate dimension: `maxRequests` alone can't cap the rate, because fast requests free their slot quickly and get replaced, so far more than `maxRequests` can reach the backend each second. `spacing` staggers bursts so a slow upstream — or a slow dependency behind it, like network storage — isn't hammered all at once. It only adds delay during a burst; isolated requests pass straight through.
+- **`maxQueue`** and **`maxWait`** bound how much is held back, and for how long, before excess requests are shed with a `429`.
+
+A reasonable starting point for a fragile backend is a modest `maxRequests` with a small `spacing` (a few tens of ms), tuned from there: if the app struggles or errors under bursts, lower `maxRequests` or raise `spacing`; if it feels needlessly slow, do the opposite.

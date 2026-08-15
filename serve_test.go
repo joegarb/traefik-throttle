@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -235,6 +236,49 @@ func TestClientCancelWhileQueued(t *testing.T) {
 
 	close(b.release)
 	waitWG(t, &wg, 3*time.Second)
+}
+
+// With spacing set, admissions to the backend are staggered rather than landing
+// all at once — even when slots are freely available.
+func TestSpacingStaggersAdmissions(t *testing.T) {
+	const spacing = 40 * time.Millisecond
+
+	var mu sync.Mutex
+	var arrivals []time.Time
+	backend := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		arrivals = append(arrivals, time.Now())
+		mu.Unlock()
+		w.WriteHeader(http.StatusOK)
+	})
+	h, err := New(context.Background(), backend, &Config{
+		MaxRequests: 100, MaxQueue: 100, MaxWait: "5s", Spacing: spacing.String(),
+	}, "test")
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	var wg sync.WaitGroup
+	for i := 0; i < 4; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			h.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/", nil))
+		}()
+	}
+	waitWG(t, &wg, 3*time.Second)
+
+	mu.Lock()
+	defer mu.Unlock()
+	if len(arrivals) != 4 {
+		t.Fatalf("got %d admissions, want 4", len(arrivals))
+	}
+	sort.Slice(arrivals, func(i, j int) bool { return arrivals[i].Before(arrivals[j]) })
+	for i := 1; i < len(arrivals); i++ {
+		if gap := arrivals[i].Sub(arrivals[i-1]); gap < spacing/2 {
+			t.Errorf("admissions %d→%d only %v apart, want ~%v", i-1, i, gap, spacing)
+		}
+	}
 }
 
 func firePath(h http.Handler, path string, wg *sync.WaitGroup) {

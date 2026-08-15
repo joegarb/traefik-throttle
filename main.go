@@ -19,11 +19,15 @@ type Throttle struct {
 	maxQueue    int
 	maxWait     time.Duration
 	verbose     bool
-	retryAfter  string // seconds, sent as the Retry-After header on 429s
+	retryAfter  string        // seconds, sent as the Retry-After header on 429s
+	spacing     time.Duration // minimum gap between admissions to the backend
 
 	mu     sync.Mutex
 	active int             // slots currently reserved for the backend
 	queue  []chan struct{} // FIFO of waiters; each is signalled when granted a slot
+
+	paceMu    sync.Mutex
+	lastAdmit time.Time // scheduled time of the previous admission
 }
 
 // Config holds the plugin configuration.
@@ -32,6 +36,7 @@ type Config struct {
 	MaxQueue    int    `json:"maxQueue"`
 	MaxWait     string `json:"maxWait"`
 	Verbose     bool   `json:"verbose"`
+	Spacing     string `json:"spacing"`
 }
 
 // CreateConfig returns the default plugin configuration.
@@ -41,6 +46,7 @@ func CreateConfig() *Config {
 		MaxQueue:    100,
 		MaxWait:     "5s",
 		Verbose:     false,
+		Spacing:     "20ms",
 	}
 }
 
@@ -67,6 +73,12 @@ func New(ctx context.Context, next http.Handler, config *Config, name string) (h
 		retryAfter = 1
 	}
 
+	spacing, err := time.ParseDuration(config.Spacing)
+	if err != nil || spacing < 0 {
+		spacing = 0
+		config.Spacing = "0s"
+	}
+
 	return &Throttle{
 		config:      config,
 		next:        next,
@@ -76,6 +88,7 @@ func New(ctx context.Context, next http.Handler, config *Config, name string) (h
 		maxWait:     maxWait,
 		verbose:     config.Verbose,
 		retryAfter:  strconv.FormatInt(retryAfter, 10),
+		spacing:     spacing,
 	}, nil
 }
 
@@ -92,6 +105,7 @@ func (t *Throttle) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	switch t.acquire(req.Context()) {
 	case acquired:
 		defer t.release()
+		t.pace()
 		t.next.ServeHTTP(rw, req)
 	case queueFull:
 		t.logf("Request queue is full: %s\n", req.URL.String())
@@ -115,6 +129,26 @@ func (t *Throttle) reject(rw http.ResponseWriter) {
 func (t *Throttle) logf(format string, args ...interface{}) {
 	if t.verbose {
 		fmt.Printf(format, args...)
+	}
+}
+
+// pace staggers admissions to the backend so a burst doesn't all land at once
+// (which can overwhelm a slow upstream). It blocks until at least `spacing` has
+// elapsed since the previous admission. No-op when spacing is 0.
+func (t *Throttle) pace() {
+	if t.spacing <= 0 {
+		return
+	}
+	t.paceMu.Lock()
+	next := t.lastAdmit.Add(t.spacing)
+	if now := time.Now(); next.Before(now) {
+		next = now
+	}
+	t.lastAdmit = next
+	t.paceMu.Unlock()
+
+	if wait := time.Until(next); wait > 0 {
+		time.Sleep(wait)
 	}
 }
 

@@ -23,9 +23,12 @@ jobs:
       - run: go vet ./...
       - run: go test -race ./...
 
-      - name: Yaegi compatibility (isolated module — keeps yaegi out of the plugin's go.mod)
-        working-directory: yaegicheck
-        run: go test -race ./...
+      # Interpret the plugin exactly as Traefik does — the catalog's own
+      # validation (Piceus) loads plugins through Yaegi. Pinned to v0.15.1, the
+      # version whose abandon-path bug this plugin works around; `go run` keeps
+      # Yaegi out of the plugin's go.mod (the catalog rejects that dependency).
+      - name: Yaegi compatibility
+        run: go run github.com/traefik/yaegi/cmd/yaegi@v0.15.1 test .
 
   lint:
     runs-on: ubuntu-latest

@@ -15,8 +15,12 @@ jobs:
         id: meta
         uses: dependabot/fetch-metadata@v3
 
-      - name: Enable auto-merge for patch/minor updates
-        if: steps.meta.outputs.update-type == 'version-update:semver-patch' || steps.meta.outputs.update-type == 'version-update:semver-minor'
+      # Auto-merge every GitHub Actions update, major included: actions bump
+      # majors often (usually just a runner/runtime change) and the CI test gate
+      # blocks anything that actually breaks the build. Any other ecosystem
+      # (e.g. gomod, if ever re-added) still needs manual review for majors.
+      - name: Enable auto-merge for all GitHub Actions updates
+        if: steps.meta.outputs.package-ecosystem == 'github_actions'
         run: gh pr merge --auto --squash "$PR_URL"
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}

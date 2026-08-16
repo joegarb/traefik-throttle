@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -22,9 +23,14 @@ type Throttle struct {
 	retryAfter  string        // seconds, sent as the Retry-After header on 429s
 	spacing     time.Duration // minimum gap between admissions to the backend
 
-	mu     sync.Mutex
-	active int             // slots currently reserved for the backend
-	queue  []chan struct{} // FIFO of waiters; each is signalled when granted a slot
+	// sem is a counting semaphore: it holds one token per in-flight request and
+	// is buffered to maxRequests, so its capacity — not hand-maintained
+	// bookkeeping — is what caps concurrency. Because a send either completes
+	// (slot taken) or doesn't (lost the select to a timeout/cancel), there is no
+	// "granted but not yet consumed" window, so the limit holds under any
+	// goroutine scheduling, including Traefik's Yaegi interpreter.
+	sem     chan struct{}
+	waiting int32 // requests currently queued for a slot, for the maxQueue bound
 
 	paceMu    sync.Mutex
 	lastAdmit time.Time // scheduled time of the previous admission
@@ -89,6 +95,7 @@ func New(ctx context.Context, next http.Handler, config *Config, name string) (h
 		verbose:     config.Verbose,
 		retryAfter:  strconv.FormatInt(retryAfter, 10),
 		spacing:     spacing,
+		sem:         make(chan struct{}, config.MaxRequests),
 	}, nil
 }
 
@@ -152,72 +159,44 @@ func (t *Throttle) pace() {
 	}
 }
 
-// acquire reserves a concurrency slot, blocking in FIFO order when all slots are
-// busy. A newly arriving request only takes a slot immediately when no one is
-// already waiting, so queued requests are never jumped by newcomers.
+// acquire reserves a concurrency slot. A free slot is taken immediately;
+// otherwise the request queues (FIFO, up to maxQueue) until a slot frees, the
+// wait exceeds maxWait, or the client goes away.
 func (t *Throttle) acquire(ctx context.Context) acquireResult {
-	t.mu.Lock()
-	if t.active < t.maxRequests && len(t.queue) == 0 {
-		t.active++
-		t.mu.Unlock()
+	// Fast path: take a free slot without blocking. When every slot is busy this
+	// send fails and we fall through to the queue, so a newcomer never jumps an
+	// already-waiting request — Go serves the channel's blocked senders in FIFO
+	// order, and while any are waiting the buffer is full (this send can't win).
+	select {
+	case t.sem <- struct{}{}:
 		return acquired
+	default:
 	}
-	if len(t.queue) >= t.maxQueue {
-		t.mu.Unlock()
+
+	// Bound the queue before parking.
+	if int(atomic.AddInt32(&t.waiting, 1)) > t.maxQueue {
+		atomic.AddInt32(&t.waiting, -1)
 		return queueFull
 	}
-	ch := make(chan struct{})
-	t.queue = append(t.queue, ch)
-	t.mu.Unlock()
+	defer atomic.AddInt32(&t.waiting, -1)
 
 	timer := time.NewTimer(t.maxWait)
 	defer timer.Stop()
 
+	// Exactly one case fires: either the send completes (we hold a slot) or we
+	// bail with none, so a slot is never reserved and then abandoned.
 	select {
-	case <-ch:
+	case t.sem <- struct{}{}:
 		return acquired
 	case <-ctx.Done():
-		t.giveUp(ch)
 		return clientGone
 	case <-timer.C:
-		t.giveUp(ch)
 		return waitTimeout
 	}
 }
 
-// release returns a slot, handing it directly to the longest-waiting request if
-// any are queued (FIFO); otherwise the reserved count drops.
+// release frees the slot held by an in-flight request; a queued request (if any)
+// is woken to take it, in arrival order.
 func (t *Throttle) release() {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	if len(t.queue) > 0 {
-		ch := t.queue[0]
-		t.queue = t.queue[1:]
-		close(ch)
-		return
-	}
-	t.active--
-}
-
-// giveUp is called by a waiter that stopped waiting. If it was still queued the
-// reservation is untouched; if a slot had already been handed to it, that slot
-// is passed on to the next waiter.
-func (t *Throttle) giveUp(ch chan struct{}) {
-	if !t.abandon(ch) {
-		t.release()
-	}
-}
-
-// abandon removes ch from the wait queue, returning true if it was still queued
-// (false means a slot had already been granted to it).
-func (t *Throttle) abandon(ch chan struct{}) bool {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	for i := 0; i < len(t.queue); i++ {
-		if t.queue[i] == ch {
-			t.queue = append(t.queue[:i], t.queue[i+1:]...)
-			return true
-		}
-	}
-	return false
+	<-t.sem
 }

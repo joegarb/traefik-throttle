@@ -172,3 +172,42 @@ func TestNewWithPositiveMaxWait(t *testing.T) {
 		t.Errorf("Expected throttle.maxWait to be 5s, got %s", throttle.maxWait)
 	}
 }
+
+// A nil config falls back to the documented defaults from CreateConfig.
+func TestNewWithNilConfig(t *testing.T) {
+	handler, err := New(context.Background(), nil, nil, "")
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	throttle, ok := handler.(*Throttle)
+	if !ok {
+		t.Fatal("Invalid handler type")
+	}
+
+	if throttle.maxRequests != 10 {
+		t.Errorf("default maxRequests = %d, want 10", throttle.maxRequests)
+	}
+	if throttle.maxQueue != 100 {
+		t.Errorf("default maxQueue = %d, want 100", throttle.maxQueue)
+	}
+	if throttle.maxWait != 5*time.Second {
+		t.Errorf("default maxWait = %s, want 5s", throttle.maxWait)
+	}
+	if throttle.spacing != 20*time.Millisecond {
+		t.Errorf("default spacing = %s, want 20ms", throttle.spacing)
+	}
+	if throttle.verbose {
+		t.Error("default verbose = true, want false")
+	}
+}
+
+// Retry-After is a whole number of seconds, rounded up from maxWait.
+func TestRetryAfterRoundsUp(t *testing.T) {
+	handler, err := New(context.Background(), nil, &Config{MaxRequests: 1, MaxWait: "1500ms"}, "")
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	if got := handler.(*Throttle).retryAfter; got != "2" {
+		t.Errorf("retryAfter for maxWait=1500ms = %q, want \"2\"", got)
+	}
+}

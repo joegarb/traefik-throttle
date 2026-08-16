@@ -16,14 +16,14 @@ The goal is to delay bursts rather than reject them, smoothing load on a fragile
 
 ## Installation
 
-Add the plugin to Traefik's static configuration (see [Working with Traefik Plugins](https://plugins.traefik.io/install)):
+Add the plugin to Traefik's static configuration (see [Working with Traefik Plugins](https://plugins.traefik.io/install)), setting `version` to the [latest release](https://github.com/joegarb/traefik-throttle/releases):
 
 ```yaml
 experimental:
   plugins:
     throttle:
       moduleName: github.com/joegarb/traefik-throttle
-      version: v0.3.2 # latest release
+      version: vX.Y.Z
 ```
 
 ## Configuration

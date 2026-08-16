@@ -353,8 +353,8 @@ func TestRejectionSetsRetryAfter(t *testing.T) {
 }
 
 // Under heavy contention with some clients cancelling, the limit is never
-// breached, no slots leak, and every request terminates (guards the handoff
-// and abandon paths; most valuable with -race).
+// breached, no slots leak, and every request terminates (guards the queue,
+// cancel, and timeout paths; most valuable with -race).
 func TestStressStaysWithinLimit(t *testing.T) {
 	const limit = 4
 	var inFlight, maxSeen int32

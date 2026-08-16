@@ -1,9 +1,5 @@
 # traefik-throttle
 
-[![CI](https://github.com/joegarb/traefik-throttle/actions/workflows/ci.yml/badge.svg)](https://github.com/joegarb/traefik-throttle/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/github/v/release/joegarb/traefik-throttle)](https://github.com/joegarb/traefik-throttle/releases)
-[![License: MIT](https://img.shields.io/github/license/joegarb/traefik-throttle)](LICENSE)
-
 Traefik middleware to limit concurrent requests routed to services by delaying (rather than rejecting) requests over the limit. Useful for underpowered servers in very low-traffic environments (ie. homelabs).
 
 ## Background
